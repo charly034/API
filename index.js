@@ -10,36 +10,34 @@ const app = express();
    CONFIG GENERAL
 ========================= */
 app.use(express.json());
-
-// ⚠️ Ajustá el dominio si querés restringir CORS
 app.use(
   cors({
-    origin: "*", // luego podés poner ["https://tudominio.com"]
+    origin: "*", // luego podés limitarlo a tu dominio
   })
 );
 
 /* =========================
-   POSTGRES CONNECTION
+   POSTGRES
 ========================= */
 const pool = new Pool({
   host: process.env.DB_HOST, // ej: postgresql
-  port: Number(process.env.DB_PORT || 5432),
+  port: Number(process.env.DB_PORT) || 5432,
   database: process.env.DB_NAME, // laquinta_db
   user: process.env.DB_USER, // laquinta
   password: process.env.DB_PASSWORD,
-  ssl: false, // true solo si usás SSL
+  ssl: false,
 });
 
 /* =========================
-   HEALTH CHECK
+   HEALTHCHECK
 ========================= */
 app.get("/health", async (_req, res) => {
   try {
-    const r = await pool.query("SELECT now() AS now");
-    res.json({ ok: true, db_time: r.rows[0].now });
+    const r = await pool.query("SELECT 1 AS ok");
+    res.status(200).json({ ok: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ ok: false, error: "DB connection failed" });
+    console.error("Healthcheck error:", err);
+    res.status(500).json({ ok: false });
   }
 });
 
@@ -48,7 +46,7 @@ app.get("/health", async (_req, res) => {
 ========================= */
 app.get("/pedidos", async (_req, res) => {
   try {
-    const q = `
+    const query = `
       SELECT
         id,
         to_char(fecha, 'DD/MM/YYYY') AS fecha,
@@ -63,16 +61,16 @@ app.get("/pedidos", async (_req, res) => {
       LIMIT 100
     `;
 
-    const r = await pool.query(q);
-    res.json(r.rows);
+    const result = await pool.query(query);
+    res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("GET /pedidos error:", err);
     res.status(500).json({ error: "Error al obtener pedidos" });
   }
 });
 
 /* =========================
-   INSERT PEDIDO
+   POST PEDIDOS
 ========================= */
 app.post("/pedidos", async (req, res) => {
   try {
@@ -99,7 +97,7 @@ app.post("/pedidos", async (req, res) => {
       return res.status(400).json({ error: "Faltan campos obligatorios" });
     }
 
-    const q = `
+    const query = `
       INSERT INTO pedidos (
         id,
         fecha,
@@ -121,10 +119,9 @@ app.post("/pedidos", async (req, res) => {
         $8
       )
       ON CONFLICT (id) DO NOTHING
-      RETURNING id
     `;
 
-    const values = [
+    await pool.query(query, [
       id,
       fecha,
       hora,
@@ -133,26 +130,35 @@ app.post("/pedidos", async (req, res) => {
       direccion || null,
       modalidad,
       productos,
-    ];
+    ]);
 
-    const r = await pool.query(q, values);
-
-    res.json({
-      ok: true,
-      inserted: r.rowCount === 1,
-      id,
-    });
+    res.json({ ok: true, id });
   } catch (err) {
-    console.error(err);
+    console.error("POST /pedidos error:", err);
     res.status(500).json({ error: "Error al guardar pedido" });
   }
 });
 
 /* =========================
-   SERVER START
+   START SERVER
 ========================= */
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 API La Quinta corriendo en puerto ${PORT}`);
+});
+
+/* =========================
+   GRACEFUL SHUTDOWN
+========================= */
+process.on("SIGTERM", async () => {
+  console.log("SIGTERM recibido. Cerrando servidor...");
+  await pool.end();
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
+  console.log("SIGINT recibido. Cerrando servidor...");
+  await pool.end();
+  process.exit(0);
 });
