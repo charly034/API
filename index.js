@@ -10,11 +10,11 @@ app.use(express.json());
 
 // Variables de entorno en EasyPanel
 const pool = new Pool({
-  host: process.env.iamdz_laquinta_db, // ej: "postgresql" (servicio interno en EasyPanel)
+  host: process.env.DB_HOST, // ej: "postgresql" (servicio interno en EasyPanel)
   port: Number(process.env.DB_PORT || 5432),
-  database: process.env.laquinta_db, // ej: "laquinta_db"
-  user: process.env.laquinta, // ej: "laquinta"
-  password: process.env.laquinta,
+  database: process.env.DB_NAME, // ej: "laquinta_db"
+  user: process.env.DB_USER, // ej: "laquinta"
+  password: process.env.DB_PASSWORD,
 });
 
 // Health
