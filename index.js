@@ -6,6 +6,8 @@ const { Pool } = pkg;
 const app = express();
 
 app.use(express.json());
+
+// CORS simple (si después querés restringir dominios, lo ajustamos)
 app.use(cors({ origin: "*" }));
 
 // ✅ Healthchecks rápidos (para EasyPanel)
@@ -19,9 +21,35 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  ssl: false,
+  ssl: false, // si usás un Postgres externo tipo Neon/Supabase, esto suele ir true/require
 });
 
+// Log de configuración (sin password) para debug en EasyPanel
+console.log("📦 DB config:", {
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT) || 5432,
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+});
+
+// Endpoint para testear DB rápidamente
+app.get("/db", async (_req, res) => {
+  try {
+    const r = await pool.query("SELECT 1 as ok");
+    res.json({ ok: true, db: r.rows[0].ok });
+  } catch (e) {
+    console.error("DB test error:", {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      where: e?.where,
+    });
+    res.status(500).json({ ok: false, error: e?.message });
+  }
+});
+
+// Obtener pedidos
 app.get("/pedidos", async (_req, res) => {
   try {
     const q = `
@@ -29,7 +57,11 @@ app.get("/pedidos", async (_req, res) => {
         id,
         to_char(fecha, 'DD/MM/YYYY') AS fecha,
         to_char(hora, 'HH24:MI:SS') AS hora,
-        telefono, nombre, direccion, modalidad, productos
+        telefono,
+        nombre,
+        direccion,
+        modalidad,
+        productos
       FROM pedidos
       ORDER BY fecha DESC, hora DESC
       LIMIT 100
@@ -37,11 +69,18 @@ app.get("/pedidos", async (_req, res) => {
     const r = await pool.query(q);
     res.json(r.rows);
   } catch (e) {
-    console.error(e);
+    console.error("GET /pedidos error:", {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      where: e?.where,
+    });
     res.status(500).json({ error: "Error al obtener pedidos" });
   }
 });
 
+// Crear pedido
 app.post("/pedidos", async (req, res) => {
   try {
     const {
@@ -86,8 +125,44 @@ app.post("/pedidos", async (req, res) => {
 
     res.json({ ok: true, id });
   } catch (e) {
-    console.error(e);
+    console.error("POST /pedidos error:", {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      where: e?.where,
+    });
     res.status(500).json({ error: "Error al guardar pedido" });
+  }
+});
+
+// (Opcional) Endpoint para crear la tabla si no existe
+// Útil para debug inicial. Podés borrarlo después.
+app.post("/setup", async (_req, res) => {
+  try {
+    const q = `
+      CREATE TABLE IF NOT EXISTS pedidos (
+        id TEXT PRIMARY KEY,
+        fecha DATE NOT NULL,
+        hora TIME NOT NULL,
+        telefono TEXT NOT NULL,
+        nombre TEXT NOT NULL,
+        direccion TEXT,
+        modalidad TEXT NOT NULL,
+        productos TEXT NOT NULL
+      );
+    `;
+    await pool.query(q);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("POST /setup error:", {
+      message: e?.message,
+      code: e?.code,
+      detail: e?.detail,
+      hint: e?.hint,
+      where: e?.where,
+    });
+    res.status(500).json({ ok: false, error: e?.message });
   }
 });
 
@@ -98,6 +173,13 @@ app.listen(PORT, "0.0.0.0", () => {
 
 // cierre prolijo
 process.on("SIGTERM", async () => {
+  try {
+    await pool.end();
+  } catch {}
+  process.exit(0);
+});
+
+process.on("SIGINT", async () => {
   try {
     await pool.end();
   } catch {}
