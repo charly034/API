@@ -55,8 +55,8 @@ app.get("/pedidos", async (_req, res) => {
     const q = `
       SELECT
         id,
-        to_char(fecha, 'DD/MM/YYYY') AS fecha,
-        to_char(hora, 'HH24:MI:SS') AS hora,
+        fecha,
+        hora,
         telefono,
         nombre,
         direccion,
@@ -69,13 +69,7 @@ app.get("/pedidos", async (_req, res) => {
     const r = await pool.query(q);
     res.json(r.rows);
   } catch (e) {
-    console.error("GET /pedidos error:", {
-      message: e?.message,
-      code: e?.code,
-      detail: e?.detail,
-      hint: e?.hint,
-      where: e?.where,
-    });
+    console.error("GET /pedidos error:", e?.message);
     res.status(500).json({ error: "Error al obtener pedidos" });
   }
 });
