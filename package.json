@@ -2,11 +2,16 @@
   "name": "laquinta-api",
   "type": "module",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon --watch . --ext js,env --exec node index.js"
   },
   "dependencies": {
-    "express": "^4.19.2",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.19.2",
     "pg": "^8.11.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
   }
 }
